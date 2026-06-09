@@ -1,0 +1,5 @@
+.env
+node_modules/
+lashbot.db
+.wwebjs_auth/
+.wwebjs_cache/
