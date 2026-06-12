@@ -1,12 +1,16 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageTypes } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
-const { askGemini } = require('./ai');
+const fs = require('fs');
+const path = require('path');
+const { askGemini, transcribeAudio } = require('./ai');
 const { saveMessage, getHistory } = require('./database');
-const{ escalateToOwner } = require('./escalation');
+const { escalateToOwner } = require('./escalation');
 
-const OWNER_PHONE = process.env.OWNER_PHONE; // Número de la dueña para escalaciones
+const OWNER_PHONE = process.env.OWNER_PHONE;
+// Números permitidos: solo estos números recibirán respuesta del bot
+// Si está vacío, responde a todos
+const ALLOWED_NUMBERS = (process.env.ALLOWED_NUMBERS || '').split(',').filter(Boolean);
 
-//Mapa temporal para rastrear qué cliente está a la espera de respuesta de la dueña
 const pendingEscalations = new Map();
 
 function startWhatsApp() {
@@ -28,10 +32,13 @@ function startWhatsApp() {
         const from = msg.from;
         const text = msg.body;
 
-        // Ignorar mensaje del propio bot
         if (msg.fromMe) return;
-        //Ignorar grupos
         if (from.includes('@g.us')) return;
+        // Solo responder a números permitidos (si la lista está configurada)
+        if (ALLOWED_NUMBERS.length > 0 && !ALLOWED_NUMBERS.includes(from) && from !== OWNER_PHONE) {
+            console.log(`⏭️ Ignorado (no en lista): ${from}`);
+            return;
+        }
 
         //Si la dueña responde a una escalación pendiente, enviar su respuesta al cliente
         if (from === OWNER_PHONE && pendingEscalations.size > 0) {
@@ -39,6 +46,7 @@ function startWhatsApp() {
             const recent = [...pendingEscalations.entries()].find(([_, data]) => 
                 (Date.now() - data.timestamp) < 30 * 60 * 1000
         );
+        console.log(recent);
         if (recent) {
             const [clientPhone, data] = recent;
             await client.sendMessage(clientPhone, text);
@@ -49,12 +57,31 @@ function startWhatsApp() {
         }
     }
 
-        console.log(`📩 [${from}]: ${text}`);
-    saveMessage(from, "user", text);
+        // Transcribir audio si es mensaje de voz
+        let userText = text;
+        if (msg.type === MessageTypes.VOICE || msg.type === MessageTypes.AUDIO) {
+            console.log(`🎤 [${from}]: mensaje de voz recibido`);
+            try {
+                const media = await msg.downloadMedia();
+                const audioPath = path.join(__dirname, '../temp_audio.ogg');
+                fs.writeFileSync(audioPath, Buffer.from(media.data, 'base64'));
+                userText = await transcribeAudio(audioPath);
+                fs.unlinkSync(audioPath);
+                console.log(`🎤 Transcripción: ${userText}`);
+            } catch (audioErr) {
+                console.error('Error transcribiendo audio:', audioErr.message);
+                await client.sendMessage(from, 'Lo siento, no pude escuchar el audio. ¿Puedes escribirme tu pregunta? 😊');
+                return;
+            }
+        }
+
+        console.log(`📩 [${from}]: ${userText}`);
+    saveMessage(from, "user", userText);
 
     try {
         const history = getHistory(from);
-        const response = await askGemini(text, history);
+        const isFirstMessage = history.length <= 1;
+        const response = await askGemini(userText, history, isFirstMessage);
 
         //Si la respuesta sugiere escalar, enviar a la dueña
         if (response.startsWith("ESCALAR:")) {

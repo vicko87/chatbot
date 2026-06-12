@@ -1,38 +1,36 @@
-const Database = require('better-sqlite3');
+const fs = require('fs');
 const path = require('path');
 
-const db = new Database(path.join(__dirname, 'lashbot.db'));
+const DB_FILE = path.join(__dirname, '../lashbot_data.json');
 
-// Crear tabla de conversaciones si no existe   
-bd.exec(`
-CREATE TABLE IF NOT EXISTS conversations (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  phone TEXT NOT NULL,
-  role TEXT NOT NULL,
-  content TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE IF NOT EXISTS clients (
-phone TEXT PRIMARY KEY,
-name TEXT,
-last_servise TEXT,
-updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-`);
+function loadDB() {
+  if (!fs.existsSync(DB_FILE)) {
+    fs.writeFileSync(DB_FILE, JSON.stringify({ conversations: [], clients: {} }));
+  }
+  return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+}
+
+function saveDB(data) {
+  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+}
 
 function saveMessage(phone, role, content) {
-    db.prepare('INSERT INTO conversations (phone, role, content) VALUES (?, ?, ?)').run(phone, role, content);
+  const db = loadDB();
+  db.conversations.push({ phone, role, content, created_at: new Date().toISOString() });
+  saveDB(db);
 }
+
 function getHistory(phone, limit = 10) {
-    return db.prepare
-    ('SELECT role, content FROM conversations WHERE phone = ? ORDER BY created_at DESC LIMIT ?').all(phone, limit).reverse();
-
+  const db = loadDB();
+  return db.conversations
+    .filter(m => m.phone === phone)
+    .slice(-limit);
 }
+
 function saveClient(phone, name) {
-    db.prepare(
-        'INSERT INTO clients (phone, name) VALUES (?, ?) ON CONFLICT(phone) DO UPDATE SET name = excluded.name, updated_at = CURRENT_TIMESTAMP'
-    ).run(phone, name);
+  const db = loadDB();
+  db.clients[phone] = { name, updated_at: new Date().toISOString() };
+  saveDB(db);
 }
-
 
 module.exports = { saveMessage, getHistory, saveClient };

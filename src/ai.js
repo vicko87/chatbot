@@ -1,7 +1,8 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const Groq = require("groq-sdk");
+const fs = require("fs");
 const SALON_INFO = require("./knowledge");
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 function buildSystemPrompt() {
   const serviciosTexto = SALON_INFO.servicios
@@ -9,6 +10,14 @@ function buildSystemPrompt() {
     .join("\n");
 
   return `Eres la asistente virtual de ${SALON_INFO.nombre}, un salón de extensiones de pestañas y cejas en Barcelona.
+
+## REGLA MÁS IMPORTANTE — IDIOMA
+DETECTA el idioma del último mensaje del cliente y responde SIEMPRE en ESE MISMO idioma.
+- Si escribe en inglés → responde en inglés
+- Si escribe en español → responde en español  
+- Si escribe en ruso → responde en ruso
+- Si escribe en catalán → responde en catalán
+NUNCA cambies de idioma. NUNCA respondas en español si el cliente escribe en otro idioma.
 
 ## Tu personalidad
 - Respondes siempre en el idioma del cliente (español, inglés, ruso, etc.)
@@ -50,31 +59,57 @@ Tú: "Hello! We have several options depending on the style:
 What look are you going for? 😊"
 
 Cliente: "are you open on sunday?"
-Tú: "Hello! We work Monday to Saturday from 10:00 to 20:00. If you need an appointment outside these hours, it's possible for double the price ✨"
+Tú: "Hello! We work Monday to Saturday from 10:00 to 20:00. If you need an appointment outside these hours, it\'s possible for double the price ✨"
 
 Cliente: "quiero reservar cita"
 Tú: "¡Hola! Claro 😊 ¿Qué servicio te gustaría y qué fecha/hora prefieres?"`;
 }
 
-async function askGemini(userMessage, conversationHistory) {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+async function askGemini(userMessage, conversationHistory, isFirstMessage = false) {
+  const historyMessages = conversationHistory.slice(-6).map(m => ({
+    role: m.role === "user" ? "user" : "assistant",
+    content: m.content
+  }));
 
-  const historyText = conversationHistory.slice(-6).map(m =>
-    `${m.role === "user" ? "Cliente" : "Asistente"}: ${m.content}`
-  ).join("\n");
+  const greetingRule = isFirstMessage
+    ? "Es el PRIMER mensaje: saluda una sola vez según el idioma detectado."
+    : "NO es el primer mensaje: NO saludes, ve DIRECTO a responder.";
 
-  const prompt = `${buildSystemPrompt()}
+  const response = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages: [
+      { role: "system", content: buildSystemPrompt() + `\n\n## Reglas de esta respuesta\n${greetingRule}` },
+      ...historyMessages,
+      { role: "system", content: `LANGUAGE LOCK: The client's message is in ${detectLanguageHint(userMessage)}. You MUST reply in that language only. Do NOT use Spanish unless the client wrote in Spanish.` },
+      { role: "user", content: userMessage }
+    ],
+    max_tokens: 500,
+    temperature: 0.3
+  });
 
-## Conversación reciente
-${historyText}
-
-## Mensaje actual del cliente
-${userMessage}
-
-## Tu respuesta:`;
-
-  const result = await model.generateContent(prompt);
-  return result.response.text().trim();
+  return response.choices[0].message.content.trim();
 }
 
-module.exports = { askGemini };
+function detectLanguageHint(text) {
+  const lower = text.toLowerCase();
+  const englishWords = ['the','is','are','was','have','has','can','how','what','when','where','who','why','please','thank','hello','hi','good','want','need','would','could','eyelash','lash','brow'];
+  const russianChars = /[а-яёА-ЯЁ]/;
+  const catalanWords = ['hola','gràcies','estic','vull','puc','tens','fas','feu','pestanyes','celles'];
+
+  if (russianChars.test(text)) return 'ruso';
+  const words = lower.split(/\s+/);
+  if (words.some(w => englishWords.includes(w))) return 'inglés — respond in English';
+  if (catalanWords.some(w => lower.includes(w))) return 'catalán';
+  return 'español';
+}
+
+async function transcribeAudio(audioFilePath) {
+  const transcription = await groq.audio.transcriptions.create({
+    file: fs.createReadStream(audioFilePath),
+    model: "whisper-large-v3-turbo",
+    response_format: "text"
+  });
+  return transcription;
+}
+
+module.exports = { askGemini, transcribeAudio };
