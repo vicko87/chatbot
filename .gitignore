@@ -1,5 +1,7 @@
 .env
 node_modules/
 lashbot.db
+lashbot_data.json
+temp_audio.ogg
 .wwebjs_auth/
 .wwebjs_cache/

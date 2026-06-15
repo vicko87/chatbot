@@ -27,10 +27,22 @@ function getHistory(phone, limit = 10) {
     .slice(-limit);
 }
 
-function saveClient(phone, name) {
+function saveClient(phone, name, lastService = null) {
   const db = loadDB();
-  db.clients[phone] = { name, updated_at: new Date().toISOString() };
+  const existing = db.clients[phone] || {};
+  db.clients[phone] = {
+    name: name || existing.name || null,
+    lastService: lastService || existing.lastService || null,
+    visitCount: (existing.visitCount || 0) + (lastService ? 1 : 0),
+    firstVisit: existing.firstVisit || new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
   saveDB(db);
 }
 
-module.exports = { saveMessage, getHistory, saveClient };
+function getClient(phone) {
+  const db = loadDB();
+  return db.clients[phone] || null;
+}
+
+module.exports = { saveMessage, getHistory, saveClient, getClient };

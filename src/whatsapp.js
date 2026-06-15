@@ -3,8 +3,24 @@ const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
 const { askGemini, transcribeAudio } = require('./ai');
-const { saveMessage, getHistory } = require('./database');
+const { saveMessage, getHistory, getClient } = require('./database');
 const { escalateToOwner } = require('./escalation');
+
+// Horario del salón: Lunes(1)-Sábado(6), 10:00-20:00 hora Barcelona
+function isWithinBusinessHours() {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));
+  const day = now.getDay(); // 0=domingo, 1=lunes...
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+  const timeNum = hour * 100 + minute;
+  return day >= 1 && day <= 6 && timeNum >= 1000 && timeNum < 2000;
+}
+
+function getOutOfHoursMessage(lang) {
+  if (lang === 'en') return "Hello! 🌙 We're currently closed. Our hours are Monday to Saturday, 10:00–20:00. We'll reply as soon as we open! 😊";
+  if (lang === 'ru') return "Привет! 🌙 Мы сейчас закрыты. Работаем с понедельника по субботу с 10:00 до 20:00. Ответим как только откроемся! 😊";
+  return "¡Hola! 🌙 Ahora estamos cerrados. Nuestro horario es de lunes a sábado de 10:00 a 20:00. ¡Te respondemos en cuanto abramos! 😊";
+}
 
 const OWNER_PHONE = process.env.OWNER_PHONE;
 // Números permitidos: solo estos números recibirán respuesta del bot
@@ -57,6 +73,15 @@ function startWhatsApp() {
         }
     }
 
+        // Respuesta automática fuera de horario (solo si no es la dueña)
+        if (from !== OWNER_PHONE && !isWithinBusinessHours()) {
+            const lang = /[а-яёА-ЯЁ]/.test(text) ? 'ru' : /\b(hi|hello|how|what|i |my |can |please)\b/i.test(text) ? 'en' : 'es';
+            await client.sendMessage(from, getOutOfHoursMessage(lang));
+            saveMessage(from, 'assistant', '[fuera de horario]');
+            console.log(`🌙 [${from}]: fuera de horario, respuesta automática`);
+            return;
+        }
+
         // Transcribir audio si es mensaje de voz
         let userText = text;
         if (msg.type === MessageTypes.VOICE || msg.type === MessageTypes.AUDIO) {
@@ -80,8 +105,24 @@ function startWhatsApp() {
 
     try {
         const history = getHistory(from);
+        const clientInfo = getClient(from);
         const isFirstMessage = history.length <= 1;
-        const response = await askGemini(userText, history, isFirstMessage);
+
+        // Saludo fijo en el primer mensaje — sin llamar a la IA
+        const isSimpleGreeting = /^(hola|hi|hello|привет|buenos días|buenas|hey)\s*[!?.]*$/i.test(userText.trim());
+        if (isFirstMessage && isSimpleGreeting) {
+            const lang = /[а-яёА-ЯЁ]/.test(userText) ? 'ru' : /^(hi|hello|hey)/i.test(userText) ? 'en' : 'es';
+            const greeting = lang === 'en'
+                ? 'Hello! 😊 Welcome to Lash Angels. How can I help you today?'
+                : lang === 'ru'
+                ? 'Привет! 😊 Добро пожаловать в Lash Angels. Чем могу помочь?'
+                : 'Hola 😊, bienvenida a Lash Angels. ¿En qué puedo ayudarte hoy?';
+            await client.sendMessage(from, greeting);
+            saveMessage(from, 'assistant', greeting);
+            return;
+        }
+
+        const response = await askGemini(userText, history, isFirstMessage, clientInfo);
 
         //Si la respuesta sugiere escalar, enviar a la dueña
         if (response.startsWith("ESCALAR:")) {
