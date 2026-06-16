@@ -1,8 +1,41 @@
 const Groq = require("groq-sdk");
 const fs = require("fs");
 const SALON_INFO = require("./knowledge");
+const { checkAvailability, getAvailableSlots } = require("./calendar");
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+const TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "checkAvailability",
+      description: "Comprueba si un hueco horario específico está disponible en el calendario del salón",
+      parameters: {
+        type: "object",
+        properties: {
+          date: { type: "string", description: "Fecha en formato YYYY-MM-DD o nombre del día en español (lunes, martes, miércoles, jueves, viernes, sábado)" },
+          time: { type: "string", description: "Hora en formato HH:MM, por ejemplo '17:00'" }
+        },
+        required: ["date", "time"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getAvailableSlots",
+      description: "Obtiene todos los huecos libres de un día concreto en el calendario del salón",
+      parameters: {
+        type: "object",
+        properties: {
+          date: { type: "string", description: "Fecha en formato YYYY-MM-DD o nombre del día en español" }
+        },
+        required: ["date"]
+      }
+    }
+  }
+];
 
 function buildSystemPrompt() {
   const serviciosTexto = SALON_INFO.servicios
@@ -55,10 +88,12 @@ Si insiste tras dos redirecciones, repite la misma frase sin entrar en debate.
 Si te preguntan algo del salón que NO conoces con certeza (disponibilidad de un hueco concreto, política de cancelación, etc.), NO lo inventes. Responde:
 "No tengo ese dato confirmado, pero puedo pasarte con la especialista para que te lo confirme 😊"
 
-## DISPONIBILIDAD — REGLA CRÍTICA
-- NO tienes acceso al calendario. NUNCA digas que un hueco está "ocupado", "disponible", "libre" o "tomado".
-- Si preguntan por un día/hora concreto → di siempre: "Para confirmar disponibilidad puedes reservar en: ${SALON_INFO.treatwell} o te paso con la especialista."
-- ÚLTIMA cita para extensiones: 18:00. Máximo absoluto: 18:30. Si piden 19:00, 20:00 o después de las 18:30 → explica el límite claramente. Nunca aceptes una reserva después de las 18:30.
+## DISPONIBILIDAD — CALENDARIO EN TIEMPO REAL
+- Tienes acceso al calendario del salón. Usa la herramienta checkAvailability(date, time) para verificar un hueco concreto.
+- Usa getAvailableSlots(date) para ver todos los huecos libres de un día.
+- Si el hueco está disponible → confírmalo y continúa con el flujo de reserva.
+- Si no está disponible → consulta getAvailableSlots y ofrece las alternativas disponibles ese día.
+- ÚLTIMA cita para extensiones: 18:00. Máximo absoluto: 18:30. Si piden hora después de las 18:30 → explica el límite y ofrece la última disponible.
 
 ## FLUJO DE CONVERSACIÓN
 
@@ -68,9 +103,9 @@ Adapta el saludo al idioma detectado.
 
 ### Reservas (una pregunta a la vez, no repitas)
 1. ¿Qué servicio? (si no lo ha dicho ya)
-2. ¿Qué día y hora? (verifica el límite 18:00/18:30 antes de continuar)
+2. ¿Qué día y hora? → usa checkAvailability para verificar. Si no hay hueco, usa getAvailableSlots y ofrece alternativas.
 3. Nombre, apellido y número de WhatsApp
-4. NUNCA confirmes la cita como reservada. Di: "Perfecto [nombre], te paso los datos a la especialista para confirmar. También puedes reservar directamente aquí: ${SALON_INFO.treatwell} 😊"
+4. Di: "Perfecto [nombre], anoto tu solicitud: [servicio] el [día] a las [hora]. La especialista te confirmará la cita en breve 😊"
 
 ### Quejas y problemas
 - Tono calmado y empático. Nunca discutas ni culpes a la clienta.
@@ -103,19 +138,60 @@ async function askGemini(userMessage, conversationHistory, isFirstMessage = fals
     ? "Es el PRIMER mensaje: saluda una sola vez según el idioma detectado."
     : "NO es el primer mensaje: NO saludes, ve DIRECTO a responder.";
 
+  const messages = [
+    { role: "system", content: buildSystemPrompt() + clientContext + `\n\n## Reglas de esta respuesta\n${greetingRule}` },
+    ...historyMessages,
+    { role: "system", content: `LANGUAGE LOCK: The client's message is in ${detectLanguageHint(userMessage)}. You MUST reply in that language only. Do NOT use Spanish unless the client wrote in Spanish.` },
+    { role: "user", content: userMessage }
+  ];
+
+  // Primera llamada con tools disponibles
   const response = await groq.chat.completions.create({
     model: "llama-3.1-8b-instant",
-    messages: [
-      { role: "system", content: buildSystemPrompt() + clientContext + `\n\n## Reglas de esta respuesta\n${greetingRule}` },
-      ...historyMessages,
-      { role: "system", content: `LANGUAGE LOCK: The client's message is in ${detectLanguageHint(userMessage)}. You MUST reply in that language only. Do NOT use Spanish unless the client wrote in Spanish.` },
-      { role: "user", content: userMessage }
-    ],
+    messages,
+    tools: TOOLS,
+    tool_choice: "auto",
     max_tokens: 300,
     temperature: 0.3
   });
 
-  return response.choices[0].message.content.trim();
+  const choice = response.choices[0];
+
+  // Si no hay tool calls, devolver respuesta directamente
+  if (choice.finish_reason !== "tool_calls" || !choice.message.tool_calls) {
+    return choice.message.content.trim();
+  }
+
+  // Procesar cada tool call
+  const toolResults = [];
+  for (const toolCall of choice.message.tool_calls) {
+    const args = JSON.parse(toolCall.function.arguments);
+    let result;
+
+    if (toolCall.function.name === "checkAvailability") {
+      result = checkAvailability(args.date, args.time);
+    } else if (toolCall.function.name === "getAvailableSlots") {
+      result = getAvailableSlots(args.date);
+    } else {
+      result = { error: "Tool no reconocida" };
+    }
+
+    toolResults.push({
+      role: "tool",
+      tool_call_id: toolCall.id,
+      content: JSON.stringify(result)
+    });
+  }
+
+  // Segunda llamada con los resultados de las tools
+  const finalResponse = await groq.chat.completions.create({
+    model: "llama-3.1-8b-instant",
+    messages: [...messages, choice.message, ...toolResults],
+    max_tokens: 300,
+    temperature: 0.3
+  });
+
+  return finalResponse.choices[0].message.content.trim();
 }
 
 function detectLanguageHint(text) {

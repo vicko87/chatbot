@@ -1913,6 +1913,72 @@
       "role": "assistant",
       "content": "Lo siento, solo puedo ayudarte con temas de nuestro salón de pestañas: servicios, reservas o cualquier incidencia con tu tratamiento 😊. ¿En qué de esto puedo ayudarte?",
       "created_at": "2026-06-15T15:50:55.217Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "user",
+      "content": "hahaha",
+      "created_at": "2026-06-16T15:59:43.266Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "user",
+      "content": "cual el mio?",
+      "created_at": "2026-06-16T15:59:43.951Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "assistant",
+      "content": "Lo siento, solo puedo ayudarte con temas de nuestro salón de pestañas: servicios, reservas o cualquier incidencia con tu tratamiento 😊. ¿En qué de esto puedo ayudarte?",
+      "created_at": "2026-06-16T15:59:44.158Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "user",
+      "content": "hola, me gustaria hacer extension d pestañas",
+      "created_at": "2026-06-16T16:00:01.520Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "assistant",
+      "content": "¡Hola! Me alegra que hayas elegido nuestro salón para tus extensiones de pestañas. ¿Qué tipo de extensiones te gustaría hacer? Tenemos diferentes opciones, como clásico, volumen 2D, 3D, 4D, 5D, 6D, Hollywood 7-10D y volumen ruso 10D+. ¿Cuál te llama la atención?",
+      "created_at": "2026-06-16T16:00:02.196Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "user",
+      "content": "Me gustaría hacer 1d",
+      "created_at": "2026-06-16T16:00:37.355Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "assistant",
+      "content": "Lo siento, pero parece que no tengo acceso a la fecha actual. ¿Podrías decirme la fecha en la que deseas hacer tus extensiones de pestañas?",
+      "created_at": "2026-06-16T16:00:38.476Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "user",
+      "content": "luego conectamos el mio otra vez es raro que se haya desconectado",
+      "created_at": "2026-06-16T16:01:21.387Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "assistant",
+      "content": "No hay problema. ¿Qué día y hora te gustaría hacer tus extensiones de pestañas de 1D?",
+      "created_at": "2026-06-16T16:01:21.890Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "user",
+      "content": "que quieres que diga?",
+      "created_at": "2026-06-16T16:02:13.565Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "assistant",
+      "content": "No tengo un mensaje específico para que digas. ¿Qué te gustaría preguntar o decir?",
+      "created_at": "2026-06-16T16:02:14.903Z"
     }
   ],
   "clients": {}
