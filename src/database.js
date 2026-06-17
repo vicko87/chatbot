@@ -45,4 +45,4 @@ function getClient(phone) {
   return db.clients[phone] || null;
 }
 
-module.exports = { saveMessage, getHistory, saveClient, getClient };
+module.exports = { saveMessage, getHistory, saveClient, getClient, loadDB };
