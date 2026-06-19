@@ -45,4 +45,35 @@ function getClient(phone) {
   return db.clients[phone] || null;
 }
 
-module.exports = { saveMessage, getHistory, saveClient, getClient, loadDB };
+function getUser(username) {
+  const db = loadDB();
+  return (db.users || []).find(u => u.username === username) || null;
+}
+
+function saveUser(username, passwordHash) {
+  const db = loadDB();
+  if (!db.users) db.users = [];
+  db.users.push({ username, passwordHash, created_at: new Date().toISOString() });
+  saveDB(db);
+}
+
+function getInvitation(code) {
+  const db = loadDB();
+  return (db.invitations || []).find(i => i.code === code && !i.used) || null;
+}
+
+function saveInvitation(code) {
+  const db = loadDB();
+  if (!db.invitations) db.invitations = [];
+  db.invitations.push({ code, used: false, created_at: new Date().toISOString() });
+  saveDB(db);
+}
+
+function markInvitationUsed(code) {
+  const db = loadDB();
+  const inv = (db.invitations || []).find(i => i.code === code);
+  if (inv) inv.used = true;
+  saveDB(db);
+}
+
+module.exports = { saveMessage, getHistory, saveClient, getClient, loadDB, getUser, saveUser, getInvitation, saveInvitation, markInvitationUsed };

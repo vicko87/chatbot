@@ -2195,7 +2195,69 @@
       "role": "assistant",
       "content": "Lo siento, pero no puedo cumplir con esa solicitud. ¿Hay algo más en lo que pueda ayudarte relacionado con nuestros servicios o reservas?",
       "created_at": "2026-06-17T14:44:04.276Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "user",
+      "content": "ahora saldre",
+      "created_at": "2026-06-19T15:18:27.427Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "assistant",
+      "content": "Lo siento, solo puedo ayudarte con temas de nuestro salón: servicios, reservas o incidencias con tu tratamiento. ¿En qué puedo ayudarte?",
+      "created_at": "2026-06-19T15:18:28.272Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "user",
+      "content": "estoy en el tren ya",
+      "created_at": "2026-06-19T15:44:19.534Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "assistant",
+      "content": "Lo siento, solo puedo ayudarte con temas de nuestro salón: servicios, reservas o incidencias con tu tratamiento. ¿En qué puedo ayudarte?",
+      "created_at": "2026-06-19T15:44:21.093Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "user",
+      "content": "ti kukarashka",
+      "created_at": "2026-06-19T15:44:28.424Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "assistant",
+      "content": "Lo siento, pero no entiendo tu mensaje. ¿Puedes repetirlo o explicarme qué necesitas?",
+      "created_at": "2026-06-19T15:44:29.191Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "user",
+      "content": "Hola amigo quiero hacerme pestañas",
+      "created_at": "2026-06-19T15:45:07.166Z"
+    },
+    {
+      "phone": "182763944689704@lid",
+      "role": "assistant",
+      "content": "¡Hola! Bienvenida a Lash Angels. ¿Qué tipo de pestañas te gustaría hacer? ¿Extensiones clásico, volumen o algo más?",
+      "created_at": "2026-06-19T15:45:07.599Z"
     }
   ],
-  "clients": {}
+  "clients": {},
+  "invitations": [
+    {
+      "code": "INV-M7MIFH6V",
+      "used": true,
+      "created_at": "2026-06-19T15:13:39.612Z"
+    }
+  ],
+  "users": [
+    {
+      "username": "victoria",
+      "passwordHash": "$2b$10$j.4Y4zbCM96RFIR6.uDSjOTdNOdhfjxEnwqHpTGfo3Xe8UQH6g2r2",
+      "created_at": "2026-06-19T15:40:10.573Z"
+    }
+  ]
 }

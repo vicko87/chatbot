@@ -6,8 +6,8 @@ const path = require('path');
 
 
 const {startWhatsApp} = require('./src/whatsapp');
-const { loadDB } = require('./src/database');
-const { generateToken, verifyToken } = require('./src/auth');
+const { loadDB, getUser, saveUser, getInvitation, saveInvitation, markInvitationUsed } = require('./src/database');
+const { generateToken, verifyToken, hashPassword, comparePassword } = require('./src/auth');
 
 const AVAILABILITY_FILE = path.join(__dirname, "availability.json");
 
@@ -16,12 +16,36 @@ app.use(cors());
 app.use(express.json());
 
 // POST /auth/login
-app.post('/auth/login', (req, res) => {
+app.post('/auth/login', async (req, res) => {
   const { user, pass } = req.body;
-  if (user !== process.env.ADMIN_USER || pass !== process.env.ADMIN_PASS) {
-    return res.status(401).json({ error: 'Credenciales incorrectas' });
-  }
-  res.json({ token: generateToken() });
+  if (!user || !pass) return res.status(400).json({ error: 'Faltan credenciales' });
+  const found = getUser(user);
+  if (!found) return res.status(401).json({ error: 'Credenciales incorrectas' });
+  const valid = await comparePassword(pass, found.passwordHash);
+  if (!valid) return res.status(401).json({ error: 'Credenciales incorrectas' });
+  res.json({ token: generateToken(user) });
+});
+
+// POST /auth/register
+app.post('/auth/register', async (req, res) => {
+  const { user, pass, inviteCode } = req.body;
+  if (!user || !pass || !inviteCode) return res.status(400).json({ error: 'Faltan campos' });
+  const inv = getInvitation(inviteCode);
+  if (!inv) return res.status(400).json({ error: 'Código de invitación inválido o ya usado' });
+  if (getUser(user)) return res.status(400).json({ error: 'Usuario ya existe' });
+  const passwordHash = await hashPassword(pass);
+  saveUser(user, passwordHash);
+  markInvitationUsed(inviteCode);
+  res.json({ ok: true });
+});
+
+// POST /auth/invite  ← solo tú puedes usarlo con MASTER_KEY
+app.post('/auth/invite', (req, res) => {
+  const { masterKey } = req.body;
+  if (masterKey !== process.env.MASTER_KEY) return res.status(403).json({ error: 'No autorizado' });
+  const code = 'INV-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+  saveInvitation(code);
+  res.json({ code });
 });
 
 app.get('/availability', verifyToken, (req, res) => {
