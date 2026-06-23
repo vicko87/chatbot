@@ -50,6 +50,7 @@ function startWhatsApp() {
 
         if (msg.fromMe) return;
         if (from.includes('@g.us')) return;
+        if (from === 'status@broadcast') return;
         // Solo responder a números permitidos (si la lista está configurada)
         if (ALLOWED_NUMBERS.length > 0 && !ALLOWED_NUMBERS.includes(from) && from !== OWNER_PHONE) {
             console.log(`⏭️ Ignorado (no en lista): ${from}`);

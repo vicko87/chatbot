@@ -1,4 +1,6 @@
 require('dotenv').config();
+const { connectDB } = require('./src/db');
+connectDB()
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -8,6 +10,7 @@ const path = require('path');
 const {startWhatsApp} = require('./src/whatsapp');
 const { loadDB, getUser, saveUser, getInvitation, saveInvitation, markInvitationUsed } = require('./src/database');
 const { generateToken, verifyToken, hashPassword, comparePassword } = require('./src/auth');
+
 
 const AVAILABILITY_FILE = path.join(__dirname, "availability.json");
 
