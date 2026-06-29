@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const invitationSchema = new mongoose.Schema({
   code: { type: String, required: true, unique: true },
-  salonId: { type: mongoose.Schema.Types.ObjectId, ref: 'Salon', required: true },
+  salonId: { type: mongoose.Schema.Types.ObjectId, ref: 'Salon', required: false },
   used: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });

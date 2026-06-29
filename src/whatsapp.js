@@ -5,6 +5,18 @@ const path = require('path');
 const { askGemini, transcribeAudio } = require('./ai');
 const { saveMessage, getHistory, getClient } = require('./database');
 const { escalateToOwner } = require('./escalation');
+const Salon = require('./models/Salon');
+
+let BOT_SALON_ID = null;
+async function loadBotSalon() {
+  const salon = await Salon.findOne();
+  if (salon) {
+    BOT_SALON_ID = salon._id;
+    console.log(` Salon cargado: ${salon.name} (${BOT_SALON_ID})`);
+  } else {
+    console.warn('⚠️  No hay salón en la base de datos. El bot no guardará conversaciones.');
+  }
+}
 
 // Horario del salón: Lunes(1)-Sábado(6), 10:00-20:00 hora Barcelona
 function isWithinBusinessHours() {
@@ -28,6 +40,7 @@ const OWNER_PHONE = process.env.OWNER_PHONE;
 const ALLOWED_NUMBERS = (process.env.ALLOWED_NUMBERS || '').split(',').filter(Boolean);
 
 const pendingEscalations = new Map();
+let botReadyTime = null;
 
 function startWhatsApp() {
     const client = new Client({
@@ -40,8 +53,10 @@ function startWhatsApp() {
         qrcode.generate(qr, {small: true});
     });
 
-    client.on('ready', () => {
+    client.on('ready', async () => {
+        botReadyTime = Date.now();
         console.log('✅ Lashbot conectado y listo!');
+        await loadBotSalon();
     });
 
     client.on('message', async msg => {
@@ -51,6 +66,8 @@ function startWhatsApp() {
         if (msg.fromMe) return;
         if (from.includes('@g.us')) return;
         if (from === 'status@broadcast') return;
+        // Ignorar mensajes anteriores al arranque del bot
+        if (botReadyTime && msg.timestamp * 1000 < botReadyTime) return;
         // Solo responder a números permitidos (si la lista está configurada)
         if (ALLOWED_NUMBERS.length > 0 && !ALLOWED_NUMBERS.includes(from) && from !== OWNER_PHONE) {
             console.log(`⏭️ Ignorado (no en lista): ${from}`);
@@ -59,26 +76,24 @@ function startWhatsApp() {
 
         //Si la dueña responde a una escalación pendiente, enviar su respuesta al cliente
         if (from === OWNER_PHONE && pendingEscalations.size > 0) {
-            //Buscr si hay una escalacion pendiente reciente(últimos 30 minutos)
-            const recent = [...pendingEscalations.entries()].find(([_, data]) => 
+            const recent = [...pendingEscalations.entries()].find(([_, data]) =>
                 (Date.now() - data.timestamp) < 30 * 60 * 1000
-        );
-        console.log(recent);
-        if (recent) {
-            const [clientPhone, data] = recent;
-            await client.sendMessage(clientPhone, text);
-            saveMessage(clientPhone, 'assistant', text);
-            pendingEscalations.delete(clientPhone);
-            console.log(`✅ Respuesta enviada al cliente ${clientPhone}`);
-            return;
+            );
+            if (recent) {
+                const [clientPhone] = recent;
+                await client.sendMessage(clientPhone, text);
+                if (BOT_SALON_ID) await saveMessage(BOT_SALON_ID, clientPhone, 'assistant', text);
+                pendingEscalations.delete(clientPhone);
+                console.log(`✅ Respuesta enviada al cliente ${clientPhone}`);
+                return;
+            }
         }
-    }
 
         // Respuesta automática fuera de horario (solo si no es la dueña)
         if (from !== OWNER_PHONE && !isWithinBusinessHours()) {
             const lang = /[а-яёА-ЯЁ]/.test(text) ? 'ru' : /\b(hi|hello|how|what|i |my |can |please)\b/i.test(text) ? 'en' : 'es';
             await client.sendMessage(from, getOutOfHoursMessage(lang));
-            saveMessage(from, 'assistant', '[fuera de horario]');
+            if (BOT_SALON_ID) await saveMessage(BOT_SALON_ID, from, 'assistant', '[fuera de horario]');
             console.log(`🌙 [${from}]: fuera de horario, respuesta automática`);
             return;
         }
@@ -102,11 +117,11 @@ function startWhatsApp() {
         }
 
         console.log(`📩 [${from}]: ${userText}`);
-    saveMessage(from, "user", userText);
+        if (BOT_SALON_ID) await saveMessage(BOT_SALON_ID, from, 'user', userText);
 
     try {
-        const history = getHistory(from);
-        const clientInfo = getClient(from);
+        const history = BOT_SALON_ID ? await getHistory(BOT_SALON_ID, from) : [];
+        const clientInfo = BOT_SALON_ID ? await getClient(BOT_SALON_ID, from) : null;
         const isFirstMessage = history.length <= 1;
 
         // Saludo fijo en el primer mensaje — sin llamar a la IA
@@ -119,23 +134,23 @@ function startWhatsApp() {
                 ? 'Привет! 😊 Добро пожаловать в Lash Angels. Чем могу помочь?'
                 : 'Hola 😊, bienvenida a Lash Angels. ¿En qué puedo ayudarte hoy?';
             await client.sendMessage(from, greeting);
-            saveMessage(from, 'assistant', greeting);
+            if (BOT_SALON_ID) await saveMessage(BOT_SALON_ID, from, 'assistant', greeting);
             return;
         }
 
         const response = await askGemini(userText, history, isFirstMessage, clientInfo);
 
         //Si la respuesta sugiere escalar, enviar a la dueña
-        if (response.startsWith("ESCALAR:")) {
-            const question = response.replace("ESCALAR:", "").trim();
-        await client.sendMessage(from, "Un momento, te confirmo enseguida 🙏");
-        await escalateToOwner(client, OWNER_PHONE, from, text, question);
-        pendingEscalations.set(from, { timestamp: Date.now() });
-        saveMessage(from, "assistant", "Un momento, te confirmo enseguida 🙏");
-      } else {
-        await client.sendMessage(from, response);
-        saveMessage(from, "assistant", response);
-      }
+        if (response.startsWith('ESCALAR:')) {
+            const question = response.replace('ESCALAR:', '').trim();
+            await client.sendMessage(from, 'Un momento, te confirmo enseguida 🙏');
+            await escalateToOwner(client, OWNER_PHONE, from, userText, question);
+            pendingEscalations.set(from, { timestamp: Date.now() });
+            if (BOT_SALON_ID) await saveMessage(BOT_SALON_ID, from, 'assistant', 'Un momento, te confirmo enseguida 🙏');
+        } else {
+            await client.sendMessage(from, response);
+            if (BOT_SALON_ID) await saveMessage(BOT_SALON_ID, from, 'assistant', response);
+        }
     } catch (err) {
       console.error("Error:", err.message);
       await client.sendMessage(from, "Lo siento, ha habido un error técnico. Por favor intenta de nuevo en un momento.");
